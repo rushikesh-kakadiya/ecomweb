@@ -1,5 +1,4 @@
 /* eslint-disable no-undef */
-/* eslint-disable no-unused-vars */
 const express = require("express");
 const app = express();
 var cookieParser = require("cookie-parser");
@@ -8,7 +7,7 @@ const session = require("express-session");
 const routes = require("./router")
 const cors = require("cors");
 const corsOptions = {
-  origin: ['http://localhost:5173', 'https://blogbyrushikesh.netlify.app'],
+  origin: ['http://localhost:5173', 'https://ecomwebf.netlify.app'],
   credentials: true,
   exposedHeaders: ["Access-Control-Allow-Headers", "Access-Control-Allow-Methods"],
 };
