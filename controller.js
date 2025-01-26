@@ -395,8 +395,8 @@ exports.createOrder = async (req, res) => {
         payment_method_types: ['card'],
         line_items: line_items,
         mode: 'payment',
-        success_url: `${FURL}/success`, // Redirect URL on success
-        cancel_url: `${FURL}/failure`, // Redirect URL on cancellation
+        success_url: `${process.env.FURL}/success`, // Redirect URL on success
+        cancel_url: `${process.env.FURL}/failure`, // Redirect URL on cancellation
       });
   
       // Return the session URL in the response
