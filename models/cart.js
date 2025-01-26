@@ -1,6 +1,7 @@
 'use strict';
 const {
-  Model
+  Model,
+  BOOLEAN
 } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class Cart extends Model {
@@ -21,7 +22,8 @@ module.exports = (sequelize, DataTypes) => {
     product_id: DataTypes.INTEGER,
     quantity: DataTypes.INTEGER,
     created_at: DataTypes.DATE,
-    updated_at: DataTypes.DATE
+    updated_at: DataTypes.DATE,
+    isSelected: BOOLEAN
   }, {
     sequelize,
     modelName: 'Cart',

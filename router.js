@@ -30,7 +30,10 @@ const {
   createShipping,
   updateShippingStatus,
   updateCartQuantity,
-  deleteCartItem
+  deleteCartItem,
+  getSelectedCartItems,
+  updateCartItemSelection,
+  getUserShippingAddress
 } = require('./controller'); // Importing all functions from a controller file
 const multer = require("multer")
 const storage = multer.memoryStorage();
@@ -54,6 +57,12 @@ router.get('/cart', getUserCart);
 router.post('/cart', addToCart);
 router.put('/cart/:cartItemId', updateCartQuantity);
 router.delete('/cart/:cartItemId', deleteCartItem);
+// Selected cart items route
+router.get('/cart/selected', getSelectedCartItems); // Get selected items (is_selected: true)
+router.put('/cart/select/:cartItemId', updateCartItemSelection); // Update is_selected status of a cart item
+
+// User shipping address route
+router.get('/user/address', getUserShippingAddress);
 // Order Routes
 router.post('/orders', createOrder);
 router.get('/orders', getAllOrders);
