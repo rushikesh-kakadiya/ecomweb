@@ -349,7 +349,7 @@ exports.getUserShippingAddress = async (req, res) => {
   }
 };
 
-const stripe = require('stripe')('sk_test_51QlQdDPNTVHlmdDrrI2YiK4SPCgyQ28G0T8NPR2LoCLitrwUCkvPEw6sLwzByX21AZHoEvGvwopNepZLNqckg1cj00hzPJVOSC'); // Add your Stripe secret key here
+const stripe = require('stripe')(process.env.secret_key); // Add your Stripe secret key here
 
 exports.createOrder = async (req, res) => {
     const { cart_items, total_price, shipping_address } = req.body;
