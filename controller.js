@@ -398,9 +398,7 @@ exports.createOrder = async (req, res) => {
         success_url: `${process.env.FURL}/success`, // Redirect URL on success
         cancel_url: `${process.env.FURL}/failure`, // Redirect URL on cancellation
       });
-  
-      console.log(success_url);
-      
+        
       // Return the session URL in the response
       res.status(201).json({
         order,
