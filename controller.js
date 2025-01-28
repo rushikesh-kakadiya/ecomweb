@@ -27,46 +27,121 @@ const {
 const cors = require("cors");
 const multer = require("multer");
 const LocalStrategy = require("passport-local");
+app.use(passport.initialize());
+// app.use(passport.session());
+passport.use(
+  new LocalStrategy(
+    {
+      usernameField: "email",
+      passwordField: "password",
+    },
+    function (email, password, done) {
+      //this one is typically a DB call. Assume that the returned user object is pre-formatted and ready for storing in JWT
+      return User.findOne({ where: { email } })
+        .then(async (user) => {
+          if (!user) {
+            return done(null, undefined, {
+              message: "No such user",
+            });
+          }
+          const result = await bcrypt.compare(password, user.password);
 
+          if (!result) {
+            return done(null, false, {
+              message: "Incorrect email or password.",
+            });
+          } else {
+            return done(null, user, { message: "Logged In Successfully" });
+          }
+        })
+        .catch((error) => {
+          return done(error);
+        });
+    }
+  )
+);
+
+const passportJWT = require("passport-jwt");
+const JWTStrategy = passportJWT.Strategy;
+const ExtractJWT = passportJWT.ExtractJwt;
+passport.use(
+  new JWTStrategy(
+    {
+      jwtFromRequest: ExtractJWT.fromAuthHeaderAsBearerToken(),
+      secretOrKey: process.env.JWT_SECRET || 'Rushikesh Kakadiya',
+    },
+    function (jwtPayload, cb) {
+      //find the user in db if needed. This functionality may be omitted if you store everything you'll need in JWT payload.
+      return User.findByPk(jwtPayload.id)
+        .then((user) => {
+          return cb(null, user);
+        })
+        .catch((err) => {
+          return cb(err);
+        });
+    }
+  )
+);
+
+// Register User
 exports.registerUser = async (req, res) => {
   const { name, email, password, phone, address } = req.body;
   try {
+    // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
-    console.log(User);
 
+    // Create the user
     const user = await User.create({
       name,
       email,
       password: hashedPassword,
       phone,
       address,
-      role: "customer",
+      role: 'customer', // default role
     });
-    res.status(201).json({ message: "User registered successfully", user });
+
+    res.status(201).json({ message: 'User registered successfully', user });
   } catch (error) {
-    res
-      .status(500)
-      .json({ error: "Registration failed", details: error.message });
+    res.status(500).json({ error: 'Registration failed', details: error.message });
   }
 };
 
-exports.loginUser = async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await User.findOne({ where: { email } });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ error: "Invalid email or password" });
+// Login User
+exports.loginUser = (req, res, next) => {
+  // Use Passport's local strategy to authenticate
+  passport.authenticate('local', { session: false }, (err, user, info) => {
+    if (err || !user) {
+      return res.status(401).json({
+        message: 'Invalid email or password',
+        ...(info && { info }),
+      });
     }
-    const token = jwt.sign(
-      { id: user.id, role: user.role },
-      process.env.JWT_SECRET || "default_secret_key", // Fallback in case JWT_SECRET is undefined
-      { expiresIn: "1d" }
-    );
-    res.status(200).json({ message: "Login successful", token });
-  } catch (error) {
-    res.status(500).json({ error: "Login failed", details: error.message });
-  }
+
+    // Login the user and issue JWT token
+    req.login(user, { session: false }, (err) => {
+      if (err) {
+        return res.status(500).json({ error: 'Login failed', details: err.message });
+      }
+
+      // Create JWT token with user info
+      const token = jwt.sign(
+        { id: user.id, role: user.role },
+        process.env.JWT_SECRET || 'Rushikesh Kakadiya',
+        { expiresIn: '1d' } // Token expiry in 1 day
+      );
+
+      // Return sanitized user object (remove password) and token
+      const sanitizedUser = user.toJSON();
+      delete sanitizedUser.password;
+      return res.status(200).json({
+        message: 'Login successful',
+        user: sanitizedUser,
+        token,
+      });
+    });
+  })(req, res, next); // Pass control to Passport
 };
+
 
 exports.getUserProfile = async (req, res) => {
   const { id } = req.user; // Extracted from JWT middleware
@@ -124,12 +199,10 @@ exports.getProductDetails = async (req, res) => {
     if (!product) return res.status(404).json({ error: "Product not found" });
     res.status(200).json(product);
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        error: "Failed to fetch product details",
-        details: error.message,
-      });
+    res.status(500).json({
+      error: "Failed to fetch product details",
+      details: error.message,
+    });
   }
 };
 
@@ -202,8 +275,11 @@ exports.deleteProduct = async (req, res) => {
 
 exports.getUserCart = async (req, res) => {
   try {
+    const { id } = req.user; // Extracted from JWT middleware
+    console.log(id);
+    
     const cartItems = await Cart.findAll({
-      where: { user_id: 1 },
+      where: { user_id : id},
       include: Product,
     });
     res.status(200).json(cartItems);
@@ -216,8 +292,9 @@ exports.getUserCart = async (req, res) => {
 
 exports.addToCart = async (req, res) => {
   const { product_id, quantity } = req.body;
+  const { id } = req.user; // Extracted from JWT middleware
   try {
-    const cartItem = await Cart.create({ user_id: 1, product_id, quantity });
+    const cartItem = await Cart.create({ user_id: id, product_id, quantity });
     res.status(201).json({ message: "Added to cart", cartItem });
   } catch (error) {
     res
@@ -230,11 +307,13 @@ exports.addToCart = async (req, res) => {
 exports.updateCartQuantity = async (req, res) => {
   const { cartItemId } = req.params; // Get cart item ID from URL params
   const { quantity } = req.body; // New quantity from request body
+  const { id } = req.user; // Extracted from JWT middleware
+
   console.log(cartItemId);
 
   try {
     const cartItem = await Cart.findOne({
-      where: { id: cartItemId, user_id: 1 },
+      where: { id: cartItemId, user_id: id },
     });
 
     if (!cartItem) {
@@ -246,22 +325,21 @@ exports.updateCartQuantity = async (req, res) => {
 
     res.status(200).json({ message: "Cart item quantity updated", cartItem });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        error: "Failed to update cart item quantity",
-        details: error.message,
-      });
+    res.status(500).json({
+      error: "Failed to update cart item quantity",
+      details: error.message,
+    });
   }
 };
 
 // Delete a cart item
 exports.deleteCartItem = async (req, res) => {
   const { cartItemId } = req.params; // Get cart item ID from URL params
+  const { id } = req.user; // Extracted from JWT middleware
 
   try {
     const cartItem = await Cart.findOne({
-      where: { id: cartItemId, user_id: 1 },
+      where: { id: cartItemId, user_id: id },
     });
 
     if (!cartItem) {
@@ -281,10 +359,11 @@ exports.deleteCartItem = async (req, res) => {
 // Fetch selected cart items
 exports.getSelectedCartItems = async (req, res) => {
   try {
-    // const userId = req.user.id; // Assuming the user ID is available in the request
+    const { id } = req.user; // Extracted from JWT middleware
+
     const selectedItems = await Cart.findAll({
       where: {
-        user_id : 1,
+        user_id: id,
         isSelected: true,
       },
       include: ["Product"], // Adjust based on your association
@@ -309,7 +388,6 @@ exports.updateCartItemSelection = async (req, res) => {
 
     const cartItem = await Cart.findByPk(cartItemId);
     console.log(cartItem);
-    
 
     if (!cartItem) {
       return res.status(404).json({ message: "Cart item not found" });
@@ -333,7 +411,9 @@ exports.updateCartItemSelection = async (req, res) => {
 exports.getUserShippingAddress = async (req, res) => {
   try {
     // const userId = req.user.id; // Assuming the user ID is available in the request
-    const user = await User.findByPk(1);
+    const { id } = req.user; // Extracted from JWT middleware
+
+    const user = await User.findByPk(id);
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -349,72 +429,73 @@ exports.getUserShippingAddress = async (req, res) => {
   }
 };
 
-const stripe = require('stripe')(process.env.secret_key); // Add your Stripe secret key here
+const stripe = require("stripe")(process.env.secret_key); // Add your Stripe secret key here
 
 exports.createOrder = async (req, res) => {
-    const { cart_items, total_price, shipping_address } = req.body;
-    try {
-      // Create the order record in the database
-      const order = await Order.create({
-        user_id: 1, // Use the user ID from the session or token
-        total_price,
-        status: 'pending',
-        shipping_address, // Add shipping address if needed
-      });
-  
-      // Create order items in the database
-      for (const item of cart_items) {
-        await OrderItem.create({
-          order_id: order.id,
-          product_id: item.product_id,
-          quantity: item.quantity,
-          price: item.price, // Use the price of each individual item
-        });
-      }
-            
-      // Prepare the line items for the Stripe checkout session
-      const line_items = cart_items.map(item => ({        
-        price_data: {
-          currency: 'usd', // Set the currency
-          product_data: {
-            name: item.Product.name, // Adjust to access correct property
-            description: item.Product.description, // Adjust to access correct property
+  const { cart_items, total_price, shipping_address } = req.body;
+  const { id } = req.user; // Extracted from JWT middleware
 
-            // Optionally, you can add an image URL here
-          },
-          unit_amount: Math.round(item.Product.price * 100), // Price should be in the smallest currency unit (cents for USD)
-        },
+  try {
+    // Create the order record in the database
+    const order = await Order.create({
+      user_id: id, // Use the user ID from the session or token
+      total_price,
+      status: "pending",
+      shipping_address, // Add shipping address if needed
+    });
+
+    // Create order items in the database
+    for (const item of cart_items) {
+      await OrderItem.create({
+        order_id: order.id,
+        product_id: item.product_id,
         quantity: item.quantity,
-      }));
-      console.log("_____________________________________________________");
-      
-      console.log(line_items);
-  
-      // Create the Stripe Checkout session
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ['card'],
-        line_items: line_items,
-        mode: 'payment',
-        success_url: `${process.env.FURL}/success`, // Redirect URL on success
-        cancel_url: `${process.env.FURL}/failure`, // Redirect URL on cancellation
-      });
-        
-      // Return the session URL in the response
-      res.status(201).json({
-        order,
-        sessionId: session.id // Send the session URL to the client for redirection
-      });
-      console.log(session.id);
-      
-    } catch (error) {
-      res.status(500).json({
-        error: 'Failed to create order',
-        details: error.message,
+        price: item.price, // Use the price of each individual item
       });
     }
-  };
 
+    // Prepare the line items for the Stripe checkout session
+    const line_items = cart_items.map((item) => ({
+      price_data: {
+        currency: "usd", // Set the currency
+        product_data: {
+          name: item.Product.name, // Adjust to access correct property
+          description: item.Product.description, // Adjust to access correct property
 
+          // Optionally, you can add an image URL here
+        },
+        unit_amount: Math.round(item.Product.price * 100), // Price should be in the smallest currency unit (cents for USD)
+      },
+      quantity: item.quantity,
+    }));
+    console.log("_____________________________________________________");
+
+    console.log(line_items);
+
+    // Create the Stripe Checkout session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: line_items,
+      mode: "payment",
+      success_url: `${process.env.FURL}/success`, // Redirect URL on success
+      cancel_url: `${process.env.FURL}/failure`, // Redirect URL on cancellation
+    });
+    
+
+    // Return the session URL in the response
+    res.status(201).json({
+      order,
+      sessionId: session.id, // Send the session URL to the client for redirection
+      
+    });
+    console.log(session.id);
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to create order",
+      details: error.message,
+    });
+  }
+};
 
 exports.getAllCategories = async (req, res) => {
   try {
@@ -610,12 +691,10 @@ exports.removeFromWishlist = async (req, res) => {
     await Wishlist.destroy({ where: { id } });
     res.status(204).send();
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        error: "Failed to remove from wishlist",
-        details: error.message,
-      });
+    res.status(500).json({
+      error: "Failed to remove from wishlist",
+      details: error.message,
+    });
   }
 };
 
@@ -634,12 +713,10 @@ exports.createShipping = async (req, res) => {
     });
     res.status(201).json({ message: "Shipping details added", shipping });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        error: "Failed to create shipping details",
-        details: error.message,
-      });
+    res.status(500).json({
+      error: "Failed to create shipping details",
+      details: error.message,
+    });
   }
 };
 
@@ -650,11 +727,9 @@ exports.updateShippingStatus = async (req, res) => {
     const shipping = await Shipping.update({ status }, { where: { id } });
     res.status(200).json({ message: "Shipping status updated", shipping });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        error: "Failed to update shipping status",
-        details: error.message,
-      });
+    res.status(500).json({
+      error: "Failed to update shipping status",
+      details: error.message,
+    });
   }
 };
