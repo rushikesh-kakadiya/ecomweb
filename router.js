@@ -18,7 +18,7 @@ const {
   createCategory,
   updateCategory,
   deleteCategory,
-  getAllOrders,
+  getOrdersByUserId,
   getOrderDetails,
   updateOrderStatus,
   makePayment,
@@ -71,7 +71,7 @@ router.get('/user/address', passport.authenticate('jwt', { session: false }), ge
 
 // Order Routes
 router.post('/orders', passport.authenticate('jwt', { session: false }), createOrder); // Protected route
-router.get('/orders', passport.authenticate('jwt', { session: false }), getAllOrders); // Protected route
+router.get('/orders', passport.authenticate('jwt', { session: false }), getOrdersByUserId); // Protected route
 router.get('/orders/:id', passport.authenticate('jwt', { session: false }), getOrderDetails); // Protected route
 router.put('/orders/:id', passport.authenticate('jwt', { session: false }), updateOrderStatus); // Protected route
 

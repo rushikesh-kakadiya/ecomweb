@@ -552,9 +552,12 @@ exports.deleteCategory = async (req, res) => {
   }
 };
 
-exports.getAllOrders = async (req, res) => {
+exports.getOrdersByUserId = async (req, res) => {
   try {
+    const { id } = req.user; // Get userId from request parameters
+
     const orders = await Order.findAll({
+      where: { user_id: id }, // Filter orders by user_id
       include: [
         {
           model: OrderItem,
@@ -562,6 +565,11 @@ exports.getAllOrders = async (req, res) => {
         },
       ],
     });
+
+    if (!orders.length) {
+      return res.status(404).json({ message: "No orders found for this user." });
+    }
+
     res.status(200).json(orders);
   } catch (error) {
     res
@@ -569,6 +577,7 @@ exports.getAllOrders = async (req, res) => {
       .json({ error: "Failed to fetch orders", details: error.message });
   }
 };
+
 
 exports.getOrderDetails = async (req, res) => {
   const { id } = req.params;
@@ -686,9 +695,12 @@ exports.addToWishlist = async (req, res) => {
 };
 
 exports.removeFromWishlist = async (req, res) => {
+  const { id: user_id } = req.user;
   const { id } = req.params;
+  console.log(id);
+  
   try {
-    await Wishlist.destroy({ where: { id } });
+    await Wishlist.destroy({ where: { product_id: id, user_id } });
     res.status(204).send();
   } catch (error) {
     res.status(500).json({
